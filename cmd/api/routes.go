@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -52,10 +53,50 @@ func (app *application) Routes() *chi.Mux {
 	apirouter.Get("/healthz", app.healthcheckHandler)
 	metricsrouter.Get("/metrics", metricsHandler)
 	apirouter.Get("/reset", resetHandler)
+	apirouter.Post("/validate_chirp", validatechirpHandler)
 	mainrouter.Mount("/api", apirouter)
 	mainrouter.Mount("/admin", metricsrouter)
 
 	return mainrouter
+}
+func validatechirpHandler(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Body string `json:"body"`
+	}
+	type errorMsg struct {
+		Error string `json:"error"`
+	}
+	type validBody struct {
+		Valid bool `json:"valid"`
+	}
+	w.Header().Set("Content-Type", "application/json")
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		respBody := errorMsg{
+			Error: "Something went wrong",
+		}
+		w.WriteHeader(400)
+		dat, _ := json.Marshal(respBody)
+		w.Write(dat)
+	}
+	chirpLen := len(params.Body)
+	if chirpLen > 140 {
+		respBody := errorMsg{
+			Error: "Chirp is too long",
+		}
+		w.WriteHeader(400)
+		dat, _ := json.Marshal(respBody)
+		w.Write(dat)
+	}
+	//now that the tweet is valid
+	respBody := validBody{
+		Valid: true,
+	}
+	w.WriteHeader(http.StatusOK)
+	dat, _ := json.Marshal(respBody)
+	w.Write(dat)
 }
 
 func metricsHandler(w http.ResponseWriter, r *http.Request) {
