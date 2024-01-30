@@ -80,6 +80,7 @@ func validatechirpHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
 		dat, _ := json.Marshal(respBody)
 		w.Write(dat)
+		return
 	}
 	chirpLen := len(params.Body)
 	if chirpLen > 140 {
@@ -89,6 +90,7 @@ func validatechirpHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
 		dat, _ := json.Marshal(respBody)
 		w.Write(dat)
+		return
 	}
 	//now that the tweet is valid
 	respBody := validBody{
@@ -97,6 +99,7 @@ func validatechirpHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	dat, _ := json.Marshal(respBody)
 	w.Write(dat)
+	return
 }
 
 func metricsHandler(w http.ResponseWriter, r *http.Request) {
