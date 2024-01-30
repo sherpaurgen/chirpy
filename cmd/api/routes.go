@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/go-chi/chi/v5"
@@ -59,7 +61,24 @@ func (app *application) Routes() *chi.Mux {
 
 	return mainrouter
 }
+
+func replaceWords(input string, wordsToReplace []string) string {
+
+	pattern := fmt.Sprintf(`(?i)\b(%s)\b`, strings.Join(wordsToReplace, "|"))
+
+	// Compile the regular expression
+	regex := regexp.MustCompile(pattern)
+
+	// Replace matched words with "****"
+	replaced := regex.ReplaceAllStringFunc(input, func(match string) string {
+		return "****"
+	})
+
+	return replaced
+}
+
 func validatechirpHandler(w http.ResponseWriter, r *http.Request) {
+	wordsToReplace := []string{"kerfuffle", "sharbert", "fornax"}
 	type parameters struct {
 		Body string `json:"body"`
 	}
@@ -67,18 +86,20 @@ func validatechirpHandler(w http.ResponseWriter, r *http.Request) {
 		Error string `json:"error"`
 	}
 	type validBody struct {
-		Valid bool `json:"valid"`
+		Cleaned_body string `json:"cleaned_body"`
 	}
 	w.Header().Set("Content-Type", "application/json")
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
 	err := decoder.Decode(&params)
-	if err != nil {
+	fmt.Println(params.Body)
+	if params.Body == "" || err != nil {
 		respBody := errorMsg{
 			Error: "Something went wrong",
 		}
 		w.WriteHeader(400)
 		dat, _ := json.Marshal(respBody)
+
 		w.Write(dat)
 		return
 	}
@@ -92,9 +113,12 @@ func validatechirpHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write(dat)
 		return
 	}
+
+	//lowercasemsg := strings.ToLower(params.Body)
+	cleanword := replaceWords(params.Body, wordsToReplace)
 	//now that the tweet is valid
 	respBody := validBody{
-		Valid: true,
+		Cleaned_body: cleanword,
 	}
 	w.WriteHeader(http.StatusOK)
 	dat, _ := json.Marshal(respBody)
