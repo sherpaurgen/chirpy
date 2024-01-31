@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+	fsdatabase "github.com/sherpaurgen/boot/internal"
 )
 
 var (
@@ -54,12 +55,77 @@ func (app *application) Routes() *chi.Mux {
 
 	apirouter.Get("/healthz", app.healthcheckHandler)
 	metricsrouter.Get("/metrics", metricsHandler)
+
 	apirouter.Get("/reset", resetHandler)
 	apirouter.Post("/validate_chirp", validatechirpHandler)
+	apirouter.Post("/chirps", saveChirpHandler)
+
 	mainrouter.Mount("/api", apirouter)
 	mainrouter.Mount("/admin", metricsrouter)
 
 	return mainrouter
+}
+
+func saveChirpHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	wordsToReplace := []string{"kerfuffle", "sharbert", "fornax"}
+	type parameters struct {
+		Body string `json:"body"`
+	}
+	type errorMsg struct {
+		Error string `json:"error"`
+	}
+	type validBody struct {
+		Id   int    `json:"id"`
+		Body string `json:"body"`
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	fmt.Println(params.Body)
+	if params.Body == "" || err != nil {
+		respBody := errorMsg{
+			Error: "Something went wrong",
+		}
+		w.WriteHeader(400)
+		dat, _ := json.Marshal(respBody)
+
+		w.Write(dat)
+		return
+	}
+	chirpLen := len(params.Body)
+	if chirpLen > 140 {
+		respBody := errorMsg{
+			Error: "Chirp is too long",
+		}
+		w.WriteHeader(400)
+		dat, _ := json.Marshal(respBody)
+		w.Write(dat)
+		return
+	}
+
+	//lowercasemsg := strings.ToLower(params.Body)
+	cleanword := replaceWords(params.Body, wordsToReplace)
+	//now that the tweet is valid
+	sanitizedData := fsdatabase.Chirp{
+		Id:   0,
+		Body: cleanword,
+	}
+	fpath := "./data.json"
+	jsondata, err := fsdatabase.WriteData(fpath, sanitizedData)
+	if err != nil || jsondata == nil {
+		respBody := errorMsg{
+			Error: "Problem in encoding json fsdatabase",
+		}
+		w.WriteHeader(400)
+		dat, _ := json.Marshal(respBody)
+		w.Write(dat)
+		return
+	}
+	w.WriteHeader(201)
+	w.Write(jsondata)
 }
 
 func replaceWords(input string, wordsToReplace []string) string {
