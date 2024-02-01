@@ -57,20 +57,34 @@ func (app *application) Routes() *chi.Mux {
 
 	apirouter.Get("/healthz", app.healthcheckHandler)
 	apirouter.Get("/reset", resetHandler)
+	apirouter.Get("/chirps", getAllChirpHandler)
+	apirouter.Get("/chirps/{id}", getChirp)
 	apirouter.Post("/validate_chirp", validatechirpHandler)
 	apirouter.Post("/chirps", saveChirpHandler)
-	apirouter.Get("/chirps", getChirpHandler)
 
 	mainrouter.Mount("/api", apirouter)
 	mainrouter.Mount("/admin", metricsrouter)
 
 	return mainrouter
 }
-func getChirpHandler(w http.ResponseWriter, r *http.Request) {
+func getChirp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	fpath := "./data.json"
 	log.Printf("getchiphandler called...%v\n", fpath)
-	jsondata, _ := fsdatabase.ReadData(fpath)
+	var id string
+	id = chi.URLParam(r, "id")
+	jsondata, _ := fsdatabase.ReadData(fpath, id)
+	log.Print(string(jsondata))
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsondata)
+}
+
+func getAllChirpHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	fpath := "./data.json"
+	log.Printf("getchiphandler called...%v\n", fpath)
+	id := "" //sending empty id string for getall chirp
+	jsondata, _ := fsdatabase.ReadData(fpath, id)
 	log.Print(string(jsondata))
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsondata)

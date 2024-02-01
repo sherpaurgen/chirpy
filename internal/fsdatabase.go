@@ -18,7 +18,7 @@ type Chirps struct {
 	Chirps map[string]Chirp `json:"chirps"`
 }
 
-func ReadData(fpath string) ([]byte, error) {
+func ReadData(fpath string, id string) ([]byte, error) {
 	chirpsData := Chirps{
 		Chirps: make(map[string]Chirp),
 	}
@@ -37,6 +37,22 @@ func ReadData(fpath string) ([]byte, error) {
 	// Extract values from the map and convert them into an array
 	var chirpsArray []Chirp
 	log.Println(chirpsData)
+	// if url param has id of chirp return just particular id
+	// get api/chirps/{id} START
+	if id != "" {
+		for k, v := range chirpsData.Chirps {
+			if id == k { //compares the outer id with id url param ; both are string
+				resultbyte, err := json.Marshal(Chirp{Id: v.Id, Body: v.Body})
+				if err != nil {
+					log.Println(err)
+					return nil, err
+				}
+				log.Println("get api/chirps/{id} - ", string(resultbyte))
+				return resultbyte, nil
+			}
+		}
+	}
+	// get api/chirps/{id} end
 	for _, v := range chirpsData.Chirps {
 
 		chirpsArray = append(chirpsArray, v)
