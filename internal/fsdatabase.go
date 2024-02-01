@@ -9,8 +9,6 @@ import (
 	"strconv"
 )
 
-var filepath string = "./records.json"
-
 type Chirp struct {
 	Id   int    `json:"id"`
 	Body string `json:"body"`
@@ -20,22 +18,39 @@ type Chirps struct {
 	Chirps map[string]Chirp `json:"chirps"`
 }
 
-func ReadData(fpath string) (map[string]interface{}, error) {
-	file, err := os.Open(filepath)
+func ReadData(fpath string) ([]byte, error) {
+	chirpsData := Chirps{
+		Chirps: make(map[string]Chirp),
+	}
+	file, err := os.Open(fpath)
 	if err != nil {
+		log.Print(err)
 		return nil, err
 	}
 	defer file.Close()
-	bytes, err := io.ReadAll(file)
+	b, err := io.ReadAll(file)
+	log.Print(string(b))
+	err = json.Unmarshal(b, &chirpsData)
 	if err != nil {
 		return nil, err
 	}
-	var result map[string]interface{}
-	err = json.Unmarshal(bytes, &result)
-	if err != nil {
-		return nil, err
+	// Extract values from the map and convert them into an array
+	var chirpsArray []Chirp
+	log.Println(chirpsData)
+	for _, v := range chirpsData.Chirps {
+
+		chirpsArray = append(chirpsArray, v)
 	}
-	return result, nil
+
+	// Print the transformed data
+	transformedData, err := json.Marshal(chirpsArray)
+	if err != nil {
+		fmt.Println("Error:", err)
+	}
+	fmt.Println("transformed data:--")
+	fmt.Println(string(transformedData))
+
+	return transformedData, nil
 }
 
 func IsFileEmpty(path string) (bool, error) {

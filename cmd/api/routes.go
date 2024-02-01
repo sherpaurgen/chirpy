@@ -53,20 +53,30 @@ func (app *application) Routes() *chi.Mux {
 	mainrouter.Handle("/app/assets/", http.StripPrefix("/app/assets", http.FileServer(http.Dir("./assets/"))))
 	mainrouter.Handle("/app", http.HandlerFunc(serveIndex))
 
-	apirouter.Get("/healthz", app.healthcheckHandler)
 	metricsrouter.Get("/metrics", metricsHandler)
 
+	apirouter.Get("/healthz", app.healthcheckHandler)
 	apirouter.Get("/reset", resetHandler)
 	apirouter.Post("/validate_chirp", validatechirpHandler)
 	apirouter.Post("/chirps", saveChirpHandler)
+	apirouter.Get("/chirps", getChirpHandler)
 
 	mainrouter.Mount("/api", apirouter)
 	mainrouter.Mount("/admin", metricsrouter)
 
 	return mainrouter
 }
-
+func getChirpHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	fpath := "./data.json"
+	log.Printf("getchiphandler called...%v\n", fpath)
+	jsondata, _ := fsdatabase.ReadData(fpath)
+	log.Print(string(jsondata))
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsondata)
+}
 func saveChirpHandler(w http.ResponseWriter, r *http.Request) {
+	fpath := "./data.json"
 	w.Header().Set("Content-Type", "application/json")
 	wordsToReplace := []string{"kerfuffle", "sharbert", "fornax"}
 	type parameters struct {
@@ -110,10 +120,10 @@ func saveChirpHandler(w http.ResponseWriter, r *http.Request) {
 	cleanword := replaceWords(params.Body, wordsToReplace)
 	//now that the tweet is valid
 	sanitizedData := fsdatabase.Chirp{
-		Id:   0,
 		Body: cleanword,
+		Id:   0,
 	}
-	fpath := "./data.json"
+
 	jsondata, err := fsdatabase.WriteData(fpath, sanitizedData)
 	if err != nil || jsondata == nil {
 		respBody := errorMsg{
@@ -124,7 +134,7 @@ func saveChirpHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write(dat)
 		return
 	}
-	w.WriteHeader(201)
+	w.WriteHeader(http.StatusCreated)
 	w.Write(jsondata)
 }
 
