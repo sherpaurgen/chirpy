@@ -73,7 +73,12 @@ func getChirp(w http.ResponseWriter, r *http.Request) {
 	log.Printf("getchiphandler called...%v\n", fpath)
 	var id string
 	id = chi.URLParam(r, "id")
-	jsondata, _ := fsdatabase.ReadData(fpath, id)
+	jsondata, err := fsdatabase.ReadData(fpath, id)
+	if jsondata == nil || err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		log.Println(err)
+		return
+	}
 	log.Print(string(jsondata))
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsondata)
