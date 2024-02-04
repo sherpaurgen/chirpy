@@ -73,7 +73,7 @@ func getChirp(w http.ResponseWriter, r *http.Request) {
 	log.Printf("getchiphandler called...%v\n", fpath)
 	var id string
 	id = chi.URLParam(r, "id")
-	jsondata, err := fsdatabase.ReadData(fpath, id)
+	jsondata, err := fsdatabase.ReadChirpData(fpath, id)
 	if jsondata == nil || err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.Println(err)
@@ -89,7 +89,7 @@ func getAllChirpHandler(w http.ResponseWriter, r *http.Request) {
 	fpath := "./data.json"
 	log.Printf("getchiphandler called...%v\n", fpath)
 	id := "" //sending empty id string for getall chirp
-	jsondata, _ := fsdatabase.ReadData(fpath, id)
+	jsondata, _ := fsdatabase.ReadChirpData(fpath, id)
 	log.Print(string(jsondata))
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsondata)
@@ -143,7 +143,7 @@ func saveChirpHandler(w http.ResponseWriter, r *http.Request) {
 		Id:   0,
 	}
 
-	jsondata, err := fsdatabase.WriteData(fpath, sanitizedData)
+	jsondata, err := fsdatabase.WriteChirpData(fpath, sanitizedData)
 	if err != nil || jsondata == nil {
 		respBody := errorMsg{
 			Error: "Problem in encoding json fsdatabase",

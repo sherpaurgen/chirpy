@@ -19,7 +19,7 @@ type Chirps struct {
 	Chirps map[string]Chirp `json:"chirps"`
 }
 
-func ReadData(fpath string, id string) ([]byte, error) {
+func ReadChirpData(fpath string, id string) ([]byte, error) {
 	chirpsData := Chirps{
 		Chirps: make(map[string]Chirp),
 	}
@@ -83,7 +83,7 @@ func IsFileEmpty(path string) (bool, error) {
 	return fileInfo.Size() > 30, nil
 }
 
-func WriteData(fpath string, newchirp Chirp) ([]byte, error) {
+func WriteChirpData(fpath string, newchirp Chirp) ([]byte, error) {
 	file, err := os.OpenFile(fpath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	// If the file doesn't exist, create it
 	if err != nil {
