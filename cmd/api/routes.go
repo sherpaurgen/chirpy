@@ -61,12 +61,35 @@ func (app *application) Routes() *chi.Mux {
 	apirouter.Get("/chirps/{id}", getChirp)
 	apirouter.Post("/validate_chirp", validatechirpHandler)
 	apirouter.Post("/chirps", saveChirpHandler)
+	apirouter.Post("/users", CreateUserHandler)
 
 	mainrouter.Mount("/api", apirouter)
 	mainrouter.Mount("/admin", metricsrouter)
 
 	return mainrouter
 }
+
+func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+	fpath := "./data.json"
+	var user fsdatabase.User
+	err := json.NewDecoder(r.Body).Decode(&user)
+	if err != nil {
+		http.Error(w, "Error decoding request body",
+			http.StatusInternalServerError)
+		return
+	}
+	jsondata, err := fsdatabase.CreateUser(user, fpath)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write(jsondata)
+		return
+	}
+	w.WriteHeader(201)
+	w.Write(jsondata)
+}
+
 func getChirp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	fpath := "./data.json"

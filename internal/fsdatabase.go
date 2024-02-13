@@ -2,7 +2,6 @@ package fsdatabase
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -17,6 +16,94 @@ type Chirp struct {
 
 type Chirps struct {
 	Chirps map[string]Chirp `json:"chirps"`
+	Users  map[string]User  `json:"users"`
+}
+
+type User struct {
+	Id    int    `json:"id"`
+	Email string `json:"email"`
+}
+
+func getCurrentUserCount(fpath string) (current_user_count int, err error) {
+	status, _ := IsFileEmpty(fpath)
+	if status {
+		file, _ := os.Open(fpath)
+		defer file.Close()
+		data, _ := io.ReadAll(file)
+		var filecontent Chirps
+		err := json.Unmarshal(data, &filecontent)
+		if err != nil {
+			return 0, err
+		}
+
+		current_user_count := len(filecontent.Users)
+		log.Println("curr user count:", current_user_count)
+		//if it doesnt exist current user count is 0
+		return current_user_count, nil
+	}
+	return
+}
+
+func CreateUser(user User, fpath string) ([]byte, error) {
+	//the user is struct & not a json
+	var alldata Chirps
+	var newUser User
+	fmt.Printf("Argument in CreateUser :%v", user)
+	count, err := getCurrentUserCount(fpath)
+	if err != nil {
+		fmt.Printf("getCurrentUserCount error %v\n", err)
+		os.Exit(1)
+	}
+	if count == 0 {
+		alldata.Users = make(map[string]User)
+	}
+	count = count + 1
+
+	countStr := strconv.Itoa(count)
+	newUser = user
+	newUser.Id = count
+	fmt.Println(os.Getwd())
+	file, _ := os.OpenFile(fpath, os.O_RDWR, 0644)
+
+	data, _ := io.ReadAll(file)
+	defer file.Close()
+
+	if len(data) == 0 {
+		fmt.Println("JSON data is empty")
+	}
+	//convert json file content to struct
+	err = json.Unmarshal(data, &alldata)
+	if err != nil {
+		fmt.Printf("Unmarshal error %v\n", err)
+		fmt.Printf("error body: %v", newUser)
+		os.Exit(1)
+	}
+	log.Println("all Data:")
+	log.Println(alldata)
+	alldata.Users[countStr] = newUser
+	updatedData, err := json.Marshal(alldata)
+	fmt.Println("updated Data below:-")
+	fmt.Println(string(updatedData))
+	if err != nil {
+		log.Println("error in marshalling all data:", err)
+	}
+	_, err = file.Seek(0, 0)
+	if err != nil {
+		log.Println("Fileseek error:", err)
+		os.Exit(1)
+	}
+	err = file.Truncate(0)
+	if err != nil {
+		log.Println("FileTruncate error:", err)
+		os.Exit(1)
+	}
+	_, err = file.Write(updatedData)
+	if err != nil {
+		log.Println("FileWrite error:", err)
+		os.Exit(1)
+	}
+	jsondata, _ := json.Marshal(alldata.Users[countStr])
+	return jsondata, nil
 }
 
 func ReadChirpData(fpath string, id string) ([]byte, error) {
@@ -29,7 +116,7 @@ func ReadChirpData(fpath string, id string) ([]byte, error) {
 		return nil, err
 	}
 	defer file.Close()
-	b, err := io.ReadAll(file)
+	b, _ := io.ReadAll(file)
 	log.Print(string(b))
 	err = json.Unmarshal(b, &chirpsData)
 	if err != nil {
@@ -55,7 +142,8 @@ func ReadChirpData(fpath string, id string) ([]byte, error) {
 			}
 		}
 
-		return nil, errors.New(fmt.Sprintf("Record not found for id: %s", id))
+		//return nil, errors.New(fmt.Sprintf("Record not found for id: %s", id))
+		return nil, fmt.Errorf("record not found for id: %s", id)
 	}
 	// get api/chirps/{id} end
 	for _, v := range chirpsData.Chirps {
@@ -89,7 +177,7 @@ func WriteChirpData(fpath string, newchirp Chirp) ([]byte, error) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	file.Close()
+	defer file.Close()
 	//fmt.Println(os.Getwd())
 	status, _ := IsFileEmpty(fpath)
 	log.Println(status)
@@ -105,23 +193,21 @@ func WriteChirpData(fpath string, newchirp Chirp) ([]byte, error) {
 		err = json.Unmarshal(b, &chirpsData)
 		// chirpsData has all json file content
 		if err != nil {
-			fmt.Printf("this second section %v", err)
 			return nil, err
 		}
 		chripLength := len(chirpsData.Chirps)
 		newchirp.Id = chripLength + 1
 		// adding new chirp to chirpsData
-		chirpsData.Chirps[fmt.Sprintf(strconv.Itoa(newchirp.Id))] = newchirp
+		idStr := strconv.Itoa(newchirp.Id)
+		chirpsData.Chirps[idStr] = newchirp
 		b, err = json.Marshal(chirpsData)
 		if err != nil {
-			fmt.Printf("this third section")
 			return nil, err
 		}
 
-		err = os.WriteFile(fpath, b, 0644)
-		jsondatabyte, err := json.Marshal(newchirp)
-		fmt.Printf("this is jsondatabyte %s\n", string(jsondatabyte))
-		log.Println("from IF")
+		_ = os.WriteFile(fpath, b, 0644)
+		jsondatabyte, _ := json.Marshal(newchirp)
+
 		return jsondatabyte, nil
 	} else {
 		newchirp.Id = 1
@@ -137,10 +223,8 @@ func WriteChirpData(fpath string, newchirp Chirp) ([]byte, error) {
 			return nil, err
 		}
 
-		err = os.WriteFile(fpath, b, 0644)
-		jsondatabyte, err := json.Marshal(newchirp)
-		fmt.Printf("this is jsondatabyte %s\n", string(jsondatabyte))
-		log.Println("from ELSE")
+		_ = os.WriteFile(fpath, b, 0644)
+		jsondatabyte, _ := json.Marshal(newchirp)
 
 		return jsondatabyte, nil
 	}
