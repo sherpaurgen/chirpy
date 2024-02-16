@@ -49,7 +49,11 @@ func AuthenticateUser(user User, fpath string) ([]byte, error) {
 					authenticatedUser := UserInfo{Id: userobj.Id, Email: userobj.Email}
 					jsondata, err := json.Marshal(authenticatedUser)
 					return jsondata, err
+				} else {
+					return nil, fmt.Errorf("email/password invalid")
 				}
+			} else {
+				return nil, fmt.Errorf("email/password invalid")
 			}
 		}
 	}
