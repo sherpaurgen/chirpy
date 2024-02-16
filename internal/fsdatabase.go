@@ -46,7 +46,7 @@ func AuthenticateUser(user User, fpath string) ([]byte, error) {
 			if userobj.Email == user.Email {
 				passwordMatch := checkSecret(userobj.Password, user.Password)
 				if passwordMatch {
-					authenticatedUser := UserInfo{Id: user.Id, Email: userobj.Email}
+					authenticatedUser := UserInfo{Id: userobj.Id, Email: userobj.Email}
 					jsondata, err := json.Marshal(authenticatedUser)
 					return jsondata, err
 				}
@@ -58,11 +58,9 @@ func AuthenticateUser(user User, fpath string) ([]byte, error) {
 }
 
 func checkSecret(hashedSecret string, userInputSecret string) bool {
-	err := bcrypt.CompareHashAndPassword(hashedSecret, password)
-	if err != nil {
-		return false
-	}
-	return true
+	err := bcrypt.CompareHashAndPassword([]byte(hashedSecret), []byte(userInputSecret))
+
+	return err == nil
 }
 
 func getCurrentUserCount(fpath string) (current_user_count int, err error) {
