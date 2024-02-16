@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"strconv"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Chirp struct {
@@ -20,6 +22,11 @@ type Chirps struct {
 }
 
 type User struct {
+	Id       int    `json:"id"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+type UserInfo struct {
 	Id    int    `json:"id"`
 	Email string `json:"email"`
 }
@@ -48,13 +55,13 @@ func CreateUser(user User, fpath string) ([]byte, error) {
 	//the user is struct & not a json
 	var alldata Chirps
 	var newUser User
-	fmt.Printf("Argument in CreateUser :%v", user)
+	fmt.Printf("Argument in CreateUser :%v\n", user)
 	count, err := getCurrentUserCount(fpath)
 	if err != nil {
 		fmt.Printf("getCurrentUserCount error %v\n", err)
 		os.Exit(1)
 	}
-	if count == 0 {
+	if count < 1 {
 		alldata.Users = make(map[string]User)
 	}
 	count = count + 1
@@ -62,6 +69,15 @@ func CreateUser(user User, fpath string) ([]byte, error) {
 	countStr := strconv.Itoa(count)
 	newUser = user
 	newUser.Id = count
+	secretbyte := []byte(user.Password)
+	cost := 10 // or any other appropriate cost value
+
+	hashedPassword, err := bcrypt.GenerateFromPassword(secretbyte, cost)
+	newUser.Password = string(hashedPassword)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return nil, err
+	}
 	fmt.Println(os.Getwd())
 	file, _ := os.OpenFile(fpath, os.O_RDWR, 0644)
 
@@ -102,7 +118,9 @@ func CreateUser(user User, fpath string) ([]byte, error) {
 		log.Println("FileWrite error:", err)
 		os.Exit(1)
 	}
-	jsondata, _ := json.Marshal(alldata.Users[countStr])
+	//sending email and id only
+	userinfo := UserInfo{Id: count, Email: newUser.Email}
+	jsondata, _ := json.Marshal(userinfo)
 	return jsondata, nil
 }
 

@@ -80,6 +80,7 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 			http.StatusInternalServerError)
 		return
 	}
+	// User struct with email,pass is sent NOT json
 	jsondata, err := fsdatabase.CreateUser(user, fpath)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
