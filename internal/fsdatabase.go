@@ -31,6 +31,40 @@ type UserInfo struct {
 	Email string `json:"email"`
 }
 
+func AuthenticateUser(user User, fpath string) ([]byte, error) {
+	status, _ := IsFileEmpty(fpath)
+	if status {
+		file, _ := os.Open(fpath)
+		defer file.Close()
+		data, _ := io.ReadAll(file)
+		var filecontent Chirps
+		err := json.Unmarshal(data, &filecontent)
+		if err != nil {
+			return nil, err
+		}
+		for _, userobj := range filecontent.Users {
+			if userobj.Email == user.Email {
+				passwordMatch := checkSecret(userobj.Password, user.Password)
+				if passwordMatch {
+					authenticatedUser := UserInfo{Id: user.Id, Email: userobj.Email}
+					jsondata, err := json.Marshal(authenticatedUser)
+					return jsondata, err
+				}
+			}
+		}
+	}
+
+	return nil, nil
+}
+
+func checkSecret(hashedSecret string, userInputSecret string) bool {
+	err := bcrypt.CompareHashAndPassword(hashedSecret, password)
+	if err != nil {
+		return false
+	}
+	return true
+}
+
 func getCurrentUserCount(fpath string) (current_user_count int, err error) {
 	status, _ := IsFileEmpty(fpath)
 	if status {
@@ -70,7 +104,7 @@ func CreateUser(user User, fpath string) ([]byte, error) {
 	newUser = user
 	newUser.Id = count
 	secretbyte := []byte(user.Password)
-	cost := 10 // or any other appropriate cost value
+	cost := 12 // or any other appropriate cost value
 
 	hashedPassword, err := bcrypt.GenerateFromPassword(secretbyte, cost)
 	newUser.Password = string(hashedPassword)
