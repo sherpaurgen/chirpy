@@ -53,17 +53,20 @@ func AuthenticateUser(user User, fpath string) ([]byte, error) {
 					return nil, fmt.Errorf("email/password invalid")
 				}
 			} else {
-				return nil, fmt.Errorf("email/password invalid")
+				continue
 			}
+
 		}
+		return nil, fmt.Errorf("email/password invalid")
 	}
 
 	return nil, nil
 }
 
 func checkSecret(hashedSecret string, userInputSecret string) bool {
+	log.Println(string(hashedSecret), userInputSecret)
 	err := bcrypt.CompareHashAndPassword([]byte(hashedSecret), []byte(userInputSecret))
-
+	log.Println(bcrypt.CompareHashAndPassword([]byte(hashedSecret), []byte(userInputSecret)))
 	return err == nil
 }
 
