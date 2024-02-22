@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/joho/godotenv"
 	fsdatabase "github.com/sherpaurgen/boot/internal"
 )
 
@@ -83,17 +85,27 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	jsondata, err := fsdatabase.AuthenticateUser(user, fpath)
 	if err != nil {
+		log.Println("error returned by fsdatabase.AuthenticateUser(user, fpath)")
 		w.WriteHeader(401)
 		return
 	}
 	//now that user login is successful we generate jwt
 	// username := user.Email
-	userid := user.Id
+	var user_v fsdatabase.UserInfo
+	err = json.Unmarshal(jsondata, &user_v)
+	if err != nil {
+		w.WriteHeader(401)
+		w.Write([]byte("error: unmarshaling jsondata"))
+		return
+	}
+	userid := user_v.Id
+	// useremail := user_v.Email
 	expires_in_seconds := user.Expires_in_seconds
 
 	tokenString, err := generateJWT(userid, expires_in_seconds)
 	if err != nil {
 		w.WriteHeader(401)
+		log.Println("error returned by generateJWT(userid, expires_in_seconds)")
 		return
 	}
 	//for successful auth check respond 200 and email+id
@@ -103,7 +115,13 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func generateJWT(userid int, expires_in_seconds int) (string, error) {
-	sampleSecretKey := []byte("JtRp8DrxkynDo7mfRqMDaSfntlDqleoKfaMkcp0Fh33aCMR0mA8pOGcqsexlEEC8BTfDX2U1dVjkIbc1qnkr4g")
+	//sampleSecretKey := []byte("JtRp8DrxkynDo7mfRqMDaSfntlDqleoKfaMkcp0Fh33aCMR0mA8pOGcqsexlEEC8BTfDX2U1dVjkIbc1qnkr4g")
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	sampleSecretKey := []byte(os.Getenv("JWT_SECRET_KEY"))
+	log.Println(sampleSecretKey)
 	ExpiresAt := jwt.NewNumericDate(time.Now().Add(24 * time.Hour))
 	if expires_in_seconds > 0 {
 		ExpiresAt = jwt.NewNumericDate(time.Now().Add(1 * time.Second))
@@ -112,7 +130,6 @@ func generateJWT(userid int, expires_in_seconds int) (string, error) {
 		// A usual scenario is to set the expiration time relative to the current time
 		ExpiresAt: ExpiresAt,
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		NotBefore: jwt.NewNumericDate(time.Now()),
 		Issuer:    "chirpy",
 		Subject:   fmt.Sprint(userid),
 	}
@@ -124,10 +141,12 @@ func generateJWT(userid int, expires_in_seconds int) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(sampleSecretKey)
 	if err != nil {
+		log.Println(err)
 		return "", err
 	}
 	return tokenString, nil
 }
+
 func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
