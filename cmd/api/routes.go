@@ -8,9 +8,11 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+	"github.com/golang-jwt/jwt/v5"
 	fsdatabase "github.com/sherpaurgen/boot/internal"
 )
 
@@ -84,9 +86,47 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(401)
 		return
 	}
+	//now that user login is successful we generate jwt
+	// username := user.Email
+	userid := user.Id
+	expires_in_seconds := user.Expires_in_seconds
+
+	tokenString, err := generateJWT(userid, expires_in_seconds)
+	if err != nil {
+		w.WriteHeader(401)
+		return
+	}
 	//for successful auth check respond 200 and email+id
+	w.Header().Set("Authorization", "Bearer "+tokenString)
 	w.WriteHeader(200)
 	w.Write(jsondata)
+}
+
+func generateJWT(userid int, expires_in_seconds int) (string, error) {
+	sampleSecretKey := []byte("JtRp8DrxkynDo7mfRqMDaSfntlDqleoKfaMkcp0Fh33aCMR0mA8pOGcqsexlEEC8BTfDX2U1dVjkIbc1qnkr4g")
+	ExpiresAt := jwt.NewNumericDate(time.Now().Add(24 * time.Hour))
+	if expires_in_seconds > 0 {
+		ExpiresAt = jwt.NewNumericDate(time.Now().Add(1 * time.Second))
+	}
+	claims := jwt.RegisteredClaims{
+		// A usual scenario is to set the expiration time relative to the current time
+		ExpiresAt: ExpiresAt,
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		NotBefore: jwt.NewNumericDate(time.Now()),
+		Issuer:    "chirpy",
+		Subject:   fmt.Sprint(userid),
+	}
+	// claims := jwt.MapClaims{
+	// 	"authorized": true,
+	// 	"username":   username,
+	// 	"exp":        time.Now().Add(time.Minute * 30).Unix(),
+	// }
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(sampleSecretKey)
+	if err != nil {
+		return "", err
+	}
+	return tokenString, nil
 }
 func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 
@@ -302,5 +342,3 @@ func serveIndex(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "index.html")
 
 }
-
-//mux.Handle("/app/", http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot))))

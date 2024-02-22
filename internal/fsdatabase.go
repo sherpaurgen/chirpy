@@ -22,9 +22,10 @@ type Chirps struct {
 }
 
 type User struct {
-	Id       int    `json:"id"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Id                 int    `json:"id"`
+	Email              string `json:"email"`
+	Password           string `json:"password"`
+	Expires_in_seconds int    `json:"expires_in_seconds"`
 }
 type UserInfo struct {
 	Id    int    `json:"id"`
