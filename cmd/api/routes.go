@@ -121,7 +121,6 @@ func generateJWT(userid int, expires_in_seconds int) (string, error) {
 		log.Fatal("Error loading .env file")
 	}
 	sampleSecretKey := []byte(os.Getenv("JWT_SECRET_KEY"))
-	log.Println(sampleSecretKey)
 	ExpiresAt := jwt.NewNumericDate(time.Now().Add(24 * time.Hour))
 	if expires_in_seconds > 0 {
 		ExpiresAt = jwt.NewNumericDate(time.Now().Add(1 * time.Second))
@@ -173,15 +172,13 @@ func getChirp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	fpath := "./data.json"
 	log.Printf("getchiphandler called...%v\n", fpath)
-	var id string
-	id = chi.URLParam(r, "id")
+	id := chi.URLParam(r, "id")
 	jsondata, err := fsdatabase.ReadChirpData(fpath, id)
 	if jsondata == nil || err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.Println(err)
 		return
 	}
-	log.Print(string(jsondata))
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsondata)
 }
