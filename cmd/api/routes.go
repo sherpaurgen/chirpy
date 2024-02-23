@@ -5,12 +5,16 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/joho/godotenv"
 	fsdatabase "github.com/sherpaurgen/boot/internal"
 )
 
@@ -62,11 +66,84 @@ func (app *application) Routes() *chi.Mux {
 	apirouter.Post("/validate_chirp", validatechirpHandler)
 	apirouter.Post("/chirps", saveChirpHandler)
 	apirouter.Post("/users", CreateUserHandler)
+	apirouter.Post("/login", loginHandler)
 
 	mainrouter.Mount("/api", apirouter)
 	mainrouter.Mount("/admin", metricsrouter)
 
 	return mainrouter
+}
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	fpath := "./data.json"
+	var user fsdatabase.User
+	err := json.NewDecoder(r.Body).Decode(&user)
+	if err != nil {
+		http.Error(w, "Error decoding request body",
+			http.StatusInternalServerError)
+		return
+	}
+	jsondata, err := fsdatabase.AuthenticateUser(user, fpath)
+	if err != nil {
+		log.Println("error returned by fsdatabase.AuthenticateUser(user, fpath)")
+		w.WriteHeader(401)
+		return
+	}
+	//now that user login is successful we generate jwt
+	// username := user.Email
+	var user_v fsdatabase.UserInfo
+	err = json.Unmarshal(jsondata, &user_v)
+	if err != nil {
+		w.WriteHeader(401)
+		w.Write([]byte("error: unmarshaling jsondata"))
+		return
+	}
+	userid := user_v.Id
+	// useremail := user_v.Email
+	expires_in_seconds := user.Expires_in_seconds
+
+	tokenString, err := generateJWT(userid, expires_in_seconds)
+	if err != nil {
+		w.WriteHeader(401)
+		log.Println("error returned by generateJWT(userid, expires_in_seconds)")
+		return
+	}
+	//for successful auth check respond 200 and email+id
+	w.Header().Set("Authorization", "Bearer "+tokenString)
+	w.WriteHeader(200)
+	w.Write(jsondata)
+}
+
+func generateJWT(userid int, expires_in_seconds int) (string, error) {
+	//sampleSecretKey := []byte("JtRp8DrxkynDo7mfRqMDaSfntlDqleoKfaMkcp0Fh33aCMR0mA8pOGcqsexlEEC8BTfDX2U1dVjkIbc1qnkr4g")
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	sampleSecretKey := []byte(os.Getenv("JWT_SECRET_KEY"))
+	ExpiresAt := jwt.NewNumericDate(time.Now().Add(24 * time.Hour))
+	if expires_in_seconds > 0 {
+		ExpiresAt = jwt.NewNumericDate(time.Now().Add(1 * time.Second))
+	}
+	claims := jwt.RegisteredClaims{
+		// A usual scenario is to set the expiration time relative to the current time
+		ExpiresAt: ExpiresAt,
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		Issuer:    "chirpy",
+		Subject:   fmt.Sprint(userid),
+	}
+	// claims := jwt.MapClaims{
+	// 	"authorized": true,
+	// 	"username":   username,
+	// 	"exp":        time.Now().Add(time.Minute * 30).Unix(),
+	// }
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(sampleSecretKey)
+	if err != nil {
+		log.Println(err)
+		return "", err
+	}
+	return tokenString, nil
 }
 
 func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +157,7 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 			http.StatusInternalServerError)
 		return
 	}
+	// User struct with email,pass is sent NOT json
 	jsondata, err := fsdatabase.CreateUser(user, fpath)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -94,15 +172,13 @@ func getChirp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	fpath := "./data.json"
 	log.Printf("getchiphandler called...%v\n", fpath)
-	var id string
-	id = chi.URLParam(r, "id")
+	id := chi.URLParam(r, "id")
 	jsondata, err := fsdatabase.ReadChirpData(fpath, id)
 	if jsondata == nil || err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		log.Println(err)
 		return
 	}
-	log.Print(string(jsondata))
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsondata)
 }
@@ -282,5 +358,3 @@ func serveIndex(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "index.html")
 
 }
-
-//mux.Handle("/app/", http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot))))

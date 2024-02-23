@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"strconv"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Chirp struct {
@@ -20,8 +22,53 @@ type Chirps struct {
 }
 
 type User struct {
+	Id                 int    `json:"id"`
+	Email              string `json:"email"`
+	Password           string `json:"password"`
+	Expires_in_seconds int    `json:"expires_in_seconds"`
+}
+type UserInfo struct {
 	Id    int    `json:"id"`
 	Email string `json:"email"`
+}
+
+func AuthenticateUser(user User, fpath string) ([]byte, error) {
+	status, _ := IsFileEmpty(fpath)
+	if status {
+		file, _ := os.Open(fpath)
+		defer file.Close()
+		data, _ := io.ReadAll(file)
+		var filecontent Chirps
+		err := json.Unmarshal(data, &filecontent)
+		if err != nil {
+			return nil, err
+		}
+		for _, userobj := range filecontent.Users {
+			if userobj.Email == user.Email {
+				passwordMatch := checkSecret(userobj.Password, user.Password)
+				if passwordMatch {
+					authenticatedUser := UserInfo{Id: userobj.Id, Email: userobj.Email}
+					jsondata, err := json.Marshal(authenticatedUser)
+					return jsondata, err
+				} else {
+					return nil, fmt.Errorf("email/password invalid")
+				}
+			} else {
+				continue
+			}
+
+		}
+		return nil, fmt.Errorf("email/password invalid")
+	}
+
+	return nil, nil
+}
+
+func checkSecret(hashedSecret string, userInputSecret string) bool {
+	log.Println(string(hashedSecret), userInputSecret)
+	err := bcrypt.CompareHashAndPassword([]byte(hashedSecret), []byte(userInputSecret))
+	log.Println(bcrypt.CompareHashAndPassword([]byte(hashedSecret), []byte(userInputSecret)))
+	return err == nil
 }
 
 func getCurrentUserCount(fpath string) (current_user_count int, err error) {
@@ -48,13 +95,13 @@ func CreateUser(user User, fpath string) ([]byte, error) {
 	//the user is struct & not a json
 	var alldata Chirps
 	var newUser User
-	fmt.Printf("Argument in CreateUser :%v", user)
+	fmt.Printf("Argument in CreateUser :%v\n", user)
 	count, err := getCurrentUserCount(fpath)
 	if err != nil {
 		fmt.Printf("getCurrentUserCount error %v\n", err)
 		os.Exit(1)
 	}
-	if count == 0 {
+	if count < 1 {
 		alldata.Users = make(map[string]User)
 	}
 	count = count + 1
@@ -62,6 +109,15 @@ func CreateUser(user User, fpath string) ([]byte, error) {
 	countStr := strconv.Itoa(count)
 	newUser = user
 	newUser.Id = count
+	secretbyte := []byte(user.Password)
+	cost := 12 // or any other appropriate cost value
+
+	hashedPassword, err := bcrypt.GenerateFromPassword(secretbyte, cost)
+	newUser.Password = string(hashedPassword)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return nil, err
+	}
 	fmt.Println(os.Getwd())
 	file, _ := os.OpenFile(fpath, os.O_RDWR, 0644)
 
@@ -102,7 +158,9 @@ func CreateUser(user User, fpath string) ([]byte, error) {
 		log.Println("FileWrite error:", err)
 		os.Exit(1)
 	}
-	jsondata, _ := json.Marshal(alldata.Users[countStr])
+	//sending email and id only
+	userinfo := UserInfo{Id: count, Email: newUser.Email}
+	jsondata, _ := json.Marshal(userinfo)
 	return jsondata, nil
 }
 
