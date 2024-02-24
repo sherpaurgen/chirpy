@@ -164,6 +164,54 @@ func CreateUser(user User, fpath string) ([]byte, error) {
 	return jsondata, nil
 }
 
+func ModifyUser(fpath string, id string, userinfo UserInfo) ([]byte, error) {
+	fh, err := os.OpenFile(fpath, os.O_RDWR, 0644)
+	if err != nil {
+		log.Fatal("Error when opening file in ModifyUser func:", err)
+	}
+	defer fh.Close()
+	var payload Chirps
+	content, err := io.ReadAll(fh)
+	if err != nil {
+		log.Fatal("Error reading file in modifyUser func:", err)
+	}
+	err = json.Unmarshal(content, &payload)
+	if err != nil {
+		log.Fatal("Error during unmarshal in ModifyUser func:", err)
+	}
+	//updating the struct with user change request
+	for k, v := range payload.Users {
+		if k == id {
+			v.Email = userinfo.Email
+			v.Id = userinfo.Id
+			break
+		} else {
+			continue
+		}
+	}
+	updatedData, err := json.Marshal(payload)
+	if err != nil {
+		log.Println("error in Marshal modifydata: ", err)
+		log.Fatalln(err)
+	}
+	err = os.Truncate(fpath, 0)
+	if err != nil {
+		log.Println("error in Marshal modifydata: ", err)
+		log.Fatalln(err)
+	}
+	_, err = fh.Seek(0, 0)
+	if err != nil {
+		log.Println("error in file truncate modifyuser func:", err)
+		log.Fatalln(err)
+	}
+	_, err = fh.Write(updatedData)
+	if err != nil {
+		log.Fatalln("error in updating file modifyuser:", err)
+	}
+	res, err := json.Marshal(userinfo)
+	return res, err
+}
+
 func ReadChirpData(fpath string, id string) ([]byte, error) {
 	chirpsData := Chirps{
 		Chirps: make(map[string]Chirp),
