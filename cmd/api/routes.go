@@ -90,11 +90,9 @@ func changeAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userIDString, err := token.Claims.GetSubject()
-	if err != nil {
-		log.Println(err)
-	}
-	var userinfo fsdatabase.UserInfo
+	userIDString, err := token.Claims.GetSubject() //get userid from jwt
+	handleErrorPrint("changeAccount", err)
+	var userinfo fsdatabase.User
 	err = json.NewDecoder(r.Body).Decode(&userinfo)
 	handleErrorPrint("changeAccount", err)
 
@@ -137,7 +135,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	jsondata, err := fsdatabase.AuthenticateUser(user, fpath)
 	if err != nil {
-		log.Println("error returned by fsdatabase.AuthenticateUser(user, fpath)")
+		log.Println("error returned by fsdatabase.AuthenticateUser(user, fpath)", err)
 		w.WriteHeader(401)
 		return
 	}
