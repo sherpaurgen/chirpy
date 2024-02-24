@@ -66,6 +66,7 @@ func (app *application) Routes() *chi.Mux {
 	apirouter.Post("/validate_chirp", validatechirpHandler)
 	apirouter.Post("/chirps", saveChirpHandler)
 	apirouter.Post("/users", CreateUserHandler)
+	apirouter.Put("/users", changeAccount)
 	apirouter.Post("/login", loginHandler)
 
 	mainrouter.Mount("/api", apirouter)
@@ -73,32 +74,81 @@ func (app *application) Routes() *chi.Mux {
 
 	return mainrouter
 }
+
+func changeAccount(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	//Extract JWT token from the Authorization header
+
+	authHeader := r.Header.Get("Authorization")
+	tokenString := strings.Split(authHeader, "Bearer ")[1]
+	token, err := verifyJwt(tokenString)
+	if err != nil {
+		log.Println("error occuredin parsewithclaims err:", err)
+		w.WriteHeader(401)
+		w.Write([]byte("check bearer token for errors"))
+		return
+	}
+
+	userIDString, err := token.Claims.GetSubject() //get userid from jwt
+	handleErrorPrint("changeAccount", err)
+	var userinfo fsdatabase.User
+	err = json.NewDecoder(r.Body).Decode(&userinfo)
+	handleErrorPrint("changeAccount", err)
+
+	log.Println(userIDString)
+	fpath := "./data.json"
+	res, err := fsdatabase.ModifyUser(fpath, userIDString, userinfo)
+	handleErrorPrint("changeAccount", err)
+	w.WriteHeader(200)
+	w.Write(res)
+}
+
+func verifyJwt(tokenString string) (*jwt.Token, error) {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Cannot load env in changeAccount")
+	}
+	claimsStruct := jwt.RegisteredClaims{}
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		&claimsStruct,
+		func(token *jwt.Token) (interface{}, error) {
+			return []byte(os.Getenv("JWT_SECRET_KEY")), nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return token, nil
+}
+
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	fpath := "./data.json"
 	var user fsdatabase.User
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
-		http.Error(w, "Error decoding request body",
-			http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("check json malformed body: %v", err),
+			http.StatusBadRequest)
 		return
 	}
 	jsondata, err := fsdatabase.AuthenticateUser(user, fpath)
 	if err != nil {
-		log.Println("error returned by fsdatabase.AuthenticateUser(user, fpath)")
+		log.Println("error returned by fsdatabase.AuthenticateUser(user, fpath)", err)
 		w.WriteHeader(401)
 		return
 	}
 	//now that user login is successful we generate jwt
 	// username := user.Email
-	var user_v fsdatabase.UserInfo
-	err = json.Unmarshal(jsondata, &user_v)
+	err = json.Unmarshal(jsondata, &user)
+	log.Println("this is user: ", user)
 	if err != nil {
 		w.WriteHeader(401)
 		w.Write([]byte("error: unmarshaling jsondata"))
 		return
 	}
-	userid := user_v.Id
+	userid := user.Id
 	// useremail := user_v.Email
 	expires_in_seconds := user.Expires_in_seconds
 
@@ -116,15 +166,18 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 func generateJWT(userid int, expires_in_seconds int) (string, error) {
 	//sampleSecretKey := []byte("JtRp8DrxkynDo7mfRqMDaSfntlDqleoKfaMkcp0Fh33aCMR0mA8pOGcqsexlEEC8BTfDX2U1dVjkIbc1qnkr4g")
+	log.Println(expires_in_seconds)
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
 	sampleSecretKey := []byte(os.Getenv("JWT_SECRET_KEY"))
-	ExpiresAt := jwt.NewNumericDate(time.Now().Add(24 * time.Hour))
-	if expires_in_seconds > 0 {
-		ExpiresAt = jwt.NewNumericDate(time.Now().Add(1 * time.Second))
+	ExpiresAt := jwt.NewNumericDate(time.Now().Add(time.Duration(expires_in_seconds) * time.Second))
+	log.Println("Expiresat:", ExpiresAt)
+	if expires_in_seconds < 1 {
+		ExpiresAt = jwt.NewNumericDate(time.Now().Add(24 * time.Hour))
 	}
+	log.Println("Expiresat:", ExpiresAt)
 	claims := jwt.RegisteredClaims{
 		// A usual scenario is to set the expiration time relative to the current time
 		ExpiresAt: ExpiresAt,
@@ -132,11 +185,7 @@ func generateJWT(userid int, expires_in_seconds int) (string, error) {
 		Issuer:    "chirpy",
 		Subject:   fmt.Sprint(userid),
 	}
-	// claims := jwt.MapClaims{
-	// 	"authorized": true,
-	// 	"username":   username,
-	// 	"exp":        time.Now().Add(time.Minute * 30).Unix(),
-	// }
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(sampleSecretKey)
 	if err != nil {
@@ -317,7 +366,6 @@ func validatechirpHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	dat, _ := json.Marshal(respBody)
 	w.Write(dat)
-	return
 }
 
 func metricsHandler(w http.ResponseWriter, r *http.Request) {
@@ -356,5 +404,19 @@ func serveIndex(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFile(w, r, "index.html")
+
+}
+
+func handleErrorFatal(funcname string, err error, data ...string) {
+	if err != nil {
+		log.Fatalf("error in function %v: %v\n", funcname, err)
+	}
+}
+
+func handleErrorPrint(funcname string, err error, data ...string) {
+	if err != nil {
+		log.Printf("error in function %v: %v\n", funcname, err)
+		return
+	}
 
 }

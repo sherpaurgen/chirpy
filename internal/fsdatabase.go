@@ -25,7 +25,7 @@ type User struct {
 	Id                 int    `json:"id"`
 	Email              string `json:"email"`
 	Password           string `json:"password"`
-	Expires_in_seconds int    `json:"expires_in_seconds"`
+	Expires_in_seconds int    `json:"-"`
 }
 type UserInfo struct {
 	Id    int    `json:"id"`
@@ -162,6 +162,65 @@ func CreateUser(user User, fpath string) ([]byte, error) {
 	userinfo := UserInfo{Id: count, Email: newUser.Email}
 	jsondata, _ := json.Marshal(userinfo)
 	return jsondata, nil
+}
+
+func ModifyUser(fpath string, id string, userinfo User) ([]byte, error) {
+	log.Printf("ID %v , Userdata%v\n", id, userinfo)
+	fh, err := os.OpenFile(fpath, os.O_RDWR, 0644)
+	if err != nil {
+		log.Fatal("Error when opening file in ModifyUser func:", err)
+	}
+	defer fh.Close()
+	var payload Chirps
+	content, err := io.ReadAll(fh)
+	if err != nil {
+		log.Fatal("Error reading file in modifyUser func:", err)
+	}
+	err = json.Unmarshal(content, &payload)
+	if err != nil {
+		log.Fatal("Error during unmarshal in ModifyUser func:", err)
+	}
+	//updating the struct with user change request
+
+	intid, _ := strconv.Atoi(id)
+	for k, v := range payload.Users {
+		if k == id {
+			log.Printf("key %s , id %s", k, id)
+			v.Email = userinfo.Email
+			v.Id = intid
+			secretbyte := []byte(userinfo.Password)
+			cost := 12
+			hashedPassword, _ := bcrypt.GenerateFromPassword(secretbyte, cost)
+			v.Password = string(hashedPassword)
+			payload.Users[k] = v
+			break
+		} else {
+			continue
+		}
+	}
+	log.Println(payload.Users)
+	updatedData, err := json.Marshal(payload)
+	if err != nil {
+		log.Println("error in Marshal modifydata: ", err)
+		log.Fatalln(err)
+	}
+	err = os.Truncate(fpath, 0)
+	if err != nil {
+		log.Println("error in Marshal modifydata: ", err)
+		log.Fatalln(err)
+	}
+	_, err = fh.Seek(0, 0)
+	if err != nil {
+		log.Println("error in file truncate modifyuser func:", err)
+		log.Fatalln(err)
+	}
+	_, err = fh.Write(updatedData)
+	if err != nil {
+		log.Fatalln("error in updating file modifyuser:", err)
+	}
+	res, err := json.Marshal(userinfo)
+	log.Println(string(updatedData))
+	return res, err
 }
 
 func ReadChirpData(fpath string, id string) ([]byte, error) {
