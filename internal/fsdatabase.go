@@ -31,6 +31,11 @@ type UserInfo struct {
 	Id    int    `json:"id"`
 	Email string `json:"email"`
 }
+type UserToken struct {
+	Id    int    `json:"id"`
+	Email string `json:"email"`
+	Token string `json:"token"`
+}
 
 func AuthenticateUser(user User, fpath string) ([]byte, error) {
 	status, _ := IsFileEmpty(fpath)
