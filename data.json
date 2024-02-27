@@ -1,1 +1,15 @@
-{"chirps":{"1":{"id":1,"body":"I had something interesting for breakfast"},"2":{"id":2,"body":"What about second breakfast?"}},"users":{"1":{"id":1,"email":"saul@bettercall.com","password":"$2a$12$VdAYiefE.kxP0V62HpWGe.Z/c0jjH6xs0ldnshUsEYgeD8Nu0rWg2"},"2":{"id":2,"email":"sita@ram.com","password":"$2a$12$tLFqe9bDjFs8NmKPftJRxOJaIzGAwwIcGrHuWIqH8WIcX6eS6fdXS"}}}
+{
+    "chirps": {
+        "1": {
+            "id": 1,
+            "body": "I had something interesting for breakfast"
+        },
+        "2": {
+            "id": 2,
+            "body": "What about second breakfast?"
+        }
+    },
+    "users": {
+        
+    }
+}
