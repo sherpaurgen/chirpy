@@ -148,35 +148,34 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//now that user login is successful we generate jwt
-	// username := user.Email
+	userid := user.Id
+	//expires_in_seconds := user.Expires_in_seconds
+	var user_tmp fsdatabase.UserToken
+
+	tokenString, _ := generateJWT(userid, 3600, "chirpy-access")
 	err = json.Unmarshal(jsondata, &user)
-	log.Println("this is user: ", user)
 	if err != nil {
 		w.WriteHeader(401)
 		w.Write([]byte("error: unmarshaling jsondata"))
 		return
 	}
-	userid := user.Id
-	// useremail := user_v.Email
-	//expires_in_seconds := user.Expires_in_seconds
+	log.Println("this is user: ", user)
+	user_tmp.Email = user.Email
+	user_tmp.Id = userid
+	user_tmp.Token = tokenString
 
-	tokenString, err := generateJWT(userid, 3600, "chirpy-access")
-	if err != nil {
-		w.WriteHeader(401)
-		log.Println("error returned by accesstoken gen in generateJWT(userid, expires_in_seconds)")
-		return
-	}
 	//refreshtokenString, err := generateJWT(userid, 5184000, "chirpy-refresh")
-	if err != nil {
-		w.WriteHeader(401)
-		log.Println("error returned in refreshtokenString generateJWT(userid, expires_in_seconds)")
-		return
-	}
 
 	//for successful auth check respond 200 and email+id
-	w.Header().Set("Authorization", "Bearer "+tokenString)
+	//w.Header().Set("Authorization", "Bearer "+tokenString)
+	finalresp, err := json.Marshal(user_tmp)
+	if err != nil {
+		w.WriteHeader(401)
+		w.Write([]byte("error: marshaling jsondata"))
+		return
+	}
 	w.WriteHeader(200)
-	w.Write(jsondata)
+	w.Write(finalresp)
 }
 
 func generateJWT(userid int, expires_in_seconds int, issuer string) (string, error) {
