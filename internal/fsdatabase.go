@@ -165,6 +165,7 @@ func CreateUser(user User, fpath string) ([]byte, error) {
 }
 
 func ModifyUser(fpath string, id string, userinfo User) ([]byte, error) {
+
 	log.Printf("ID %v , Userdata%v\n", id, userinfo)
 	fh, err := os.OpenFile(fpath, os.O_RDWR, 0644)
 	if err != nil {
@@ -183,8 +184,10 @@ func ModifyUser(fpath string, id string, userinfo User) ([]byte, error) {
 	//updating the struct with user change request
 
 	intid, _ := strconv.Atoi(id)
+	found := false
 	for k, v := range payload.Users {
 		if k == id {
+			found = true
 			log.Printf("key %s , id %s", k, id)
 			v.Email = userinfo.Email
 			v.Id = intid
@@ -194,10 +197,13 @@ func ModifyUser(fpath string, id string, userinfo User) ([]byte, error) {
 			v.Password = string(hashedPassword)
 			payload.Users[k] = v
 			break
-		} else {
-			continue
 		}
 	}
+	/// if no match of id is found
+	if !found {
+		return nil, fmt.Errorf("user id not found with id %s", id)
+	}
+
 	log.Println(payload.Users)
 	updatedData, err := json.Marshal(payload)
 	if err != nil {
@@ -218,8 +224,11 @@ func ModifyUser(fpath string, id string, userinfo User) ([]byte, error) {
 	if err != nil {
 		log.Fatalln("error in updating file modifyuser:", err)
 	}
-	res, err := json.Marshal(userinfo)
-	log.Println(string(updatedData))
+	var tmpdata UserInfo
+	tmpdata.Email = userinfo.Email
+	tmpdata.Id, _ = strconv.Atoi(id)
+	res, err := json.Marshal(tmpdata)
+	log.Println("The string res", string(res))
 	return res, err
 }
 

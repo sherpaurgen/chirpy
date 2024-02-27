@@ -81,6 +81,7 @@ func changeAccount(w http.ResponseWriter, r *http.Request) {
 	//Extract JWT token from the Authorization header
 
 	authHeader := r.Header.Get("Authorization")
+	log.Println(authHeader)
 	tokenString := strings.Split(authHeader, "Bearer ")[1]
 	token, err := verifyJwt(tokenString)
 	if err != nil {
@@ -90,7 +91,13 @@ func changeAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userIDString, err := token.Claims.GetSubject() //get userid from jwt
+	userIDString, _ := token.Claims.GetSubject() //get userid from jwt
+	issuer, err := token.Claims.GetIssuer()
+	expectedIssuer := "chirpy-access"
+	if issuer != expectedIssuer {
+		w.WriteHeader(401)
+		return
+	}
 	handleErrorPrint("changeAccount", err)
 	var userinfo fsdatabase.User
 	err = json.NewDecoder(r.Body).Decode(&userinfo)
@@ -100,6 +107,7 @@ func changeAccount(w http.ResponseWriter, r *http.Request) {
 	fpath := "./data.json"
 	res, err := fsdatabase.ModifyUser(fpath, userIDString, userinfo)
 	handleErrorPrint("changeAccount", err)
+
 	w.WriteHeader(200)
 	w.Write(res)
 }
@@ -150,21 +158,28 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	userid := user.Id
 	// useremail := user_v.Email
-	expires_in_seconds := user.Expires_in_seconds
+	//expires_in_seconds := user.Expires_in_seconds
 
-	tokenString, err := generateJWT(userid, expires_in_seconds)
+	tokenString, err := generateJWT(userid, 3600, "chirpy-access")
 	if err != nil {
 		w.WriteHeader(401)
-		log.Println("error returned by generateJWT(userid, expires_in_seconds)")
+		log.Println("error returned by accesstoken gen in generateJWT(userid, expires_in_seconds)")
 		return
 	}
+	//refreshtokenString, err := generateJWT(userid, 5184000, "chirpy-refresh")
+	if err != nil {
+		w.WriteHeader(401)
+		log.Println("error returned in refreshtokenString generateJWT(userid, expires_in_seconds)")
+		return
+	}
+
 	//for successful auth check respond 200 and email+id
 	w.Header().Set("Authorization", "Bearer "+tokenString)
 	w.WriteHeader(200)
 	w.Write(jsondata)
 }
 
-func generateJWT(userid int, expires_in_seconds int) (string, error) {
+func generateJWT(userid int, expires_in_seconds int, issuer string) (string, error) {
 	//sampleSecretKey := []byte("JtRp8DrxkynDo7mfRqMDaSfntlDqleoKfaMkcp0Fh33aCMR0mA8pOGcqsexlEEC8BTfDX2U1dVjkIbc1qnkr4g")
 	log.Println(expires_in_seconds)
 	err := godotenv.Load()
@@ -174,15 +189,15 @@ func generateJWT(userid int, expires_in_seconds int) (string, error) {
 	sampleSecretKey := []byte(os.Getenv("JWT_SECRET_KEY"))
 	ExpiresAt := jwt.NewNumericDate(time.Now().Add(time.Duration(expires_in_seconds) * time.Second))
 	log.Println("Expiresat:", ExpiresAt)
-	if expires_in_seconds < 1 {
-		ExpiresAt = jwt.NewNumericDate(time.Now().Add(24 * time.Hour))
-	}
+	// if expires_in_seconds < 1 {
+	// 	ExpiresAt = jwt.NewNumericDate(time.Now().Add(24 * time.Hour))
+	// }
 	log.Println("Expiresat:", ExpiresAt)
 	claims := jwt.RegisteredClaims{
 		// A usual scenario is to set the expiration time relative to the current time
 		ExpiresAt: ExpiresAt,
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		Issuer:    "chirpy",
+		Issuer:    issuer,
 		Subject:   fmt.Sprint(userid),
 	}
 
