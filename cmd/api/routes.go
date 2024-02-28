@@ -77,11 +77,9 @@ func (app *application) Routes() *chi.Mux {
 
 func changeAccount(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
 	//Extract JWT token from the Authorization header
-
 	authHeader := r.Header.Get("Authorization")
-	log.Println(authHeader)
+	log.Println("Got AuthHeader:", authHeader)
 	tokenString := strings.Split(authHeader, "Bearer ")[1]
 	token, err := verifyJwt(tokenString)
 	if err != nil {
@@ -93,7 +91,7 @@ func changeAccount(w http.ResponseWriter, r *http.Request) {
 
 	userIDString, _ := token.Claims.GetSubject() //get userid from jwt
 	issuer, err := token.Claims.GetIssuer()
-	expectedIssuer := "chirpy-access"
+	expectedIssuer := "chirpy"
 	if issuer != expectedIssuer {
 		w.WriteHeader(401)
 		return
@@ -135,24 +133,29 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	fpath := "./data.json"
 	var user fsdatabase.User
+	//getting email, token expiry time from body into user var
+	// body, _ := io.ReadAll(r.Body)
+	// log.Println(string(body))
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("check json malformed body: %v", err),
 			http.StatusBadRequest)
 		return
 	}
-	jsondata, err := fsdatabase.AuthenticateUser(user, fpath)
+
+	jsondata, user_id, err := fsdatabase.AuthenticateUser(user, fpath)
 	if err != nil {
 		log.Println("error returned by fsdatabase.AuthenticateUser(user, fpath)", err)
 		w.WriteHeader(401)
 		return
 	}
+	log.Println("Data received from login: ", user)
+
 	//now that user login is successful we generate jwt
-	userid := user.Id
-	//expires_in_seconds := user.Expires_in_seconds
+	expires_in_seconds := user.Expires_in_seconds
 	var user_tmp fsdatabase.UserToken
 
-	tokenString, _ := generateJWT(userid, 3600, "chirpy-access")
+	tokenString, _ := generateJWT(user_id, expires_in_seconds, "chirpy")
 	err = json.Unmarshal(jsondata, &user)
 	if err != nil {
 		w.WriteHeader(401)
@@ -161,11 +164,10 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Println("this is user: ", user)
 	user_tmp.Email = user.Email
-	user_tmp.Id = userid
+	user_tmp.Id = user.Id
 	user_tmp.Token = tokenString
 
 	//refreshtokenString, err := generateJWT(userid, 5184000, "chirpy-refresh")
-
 	//for successful auth check respond 200 and email+id
 	//w.Header().Set("Authorization", "Bearer "+tokenString)
 	finalresp, err := json.Marshal(user_tmp)
@@ -180,17 +182,18 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 func generateJWT(userid int, expires_in_seconds int, issuer string) (string, error) {
 	//sampleSecretKey := []byte("JtRp8DrxkynDo7mfRqMDaSfntlDqleoKfaMkcp0Fh33aCMR0mA8pOGcqsexlEEC8BTfDX2U1dVjkIbc1qnkr4g")
-	log.Println(expires_in_seconds)
+	//log.Printf("generateJWT userid: %v , expiresInSeconds: %v , issuer: %v\n", userid, expires_in_seconds, issuer)
 	err := godotenv.Load()
+	log.Println("expires_in_seconds: ", expires_in_seconds)
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
 	sampleSecretKey := []byte(os.Getenv("JWT_SECRET_KEY"))
 	ExpiresAt := jwt.NewNumericDate(time.Now().Add(time.Duration(expires_in_seconds) * time.Second))
 	log.Println("Expiresat:", ExpiresAt)
-	// if expires_in_seconds < 1 {
-	// 	ExpiresAt = jwt.NewNumericDate(time.Now().Add(24 * time.Hour))
-	// }
+	if expires_in_seconds < 1 {
+		ExpiresAt = jwt.NewNumericDate(time.Now().Add(24 * time.Hour))
+	}
 	log.Println("Expiresat:", ExpiresAt)
 	claims := jwt.RegisteredClaims{
 		// A usual scenario is to set the expiration time relative to the current time
@@ -206,6 +209,7 @@ func generateJWT(userid int, expires_in_seconds int, issuer string) (string, err
 		log.Println(err)
 		return "", err
 	}
+	log.Println("generateJWT Token provided:", tokenString)
 	return tokenString, nil
 }
 
