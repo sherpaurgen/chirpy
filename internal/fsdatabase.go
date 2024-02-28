@@ -25,7 +25,7 @@ type User struct {
 	Id                 int    `json:"id"`
 	Email              string `json:"email"`
 	Password           string `json:"password"`
-	Expires_in_seconds int    `json:"-"`
+	Expires_in_seconds int    `json:"expires_in_seconds"`
 }
 type UserInfo struct {
 	Id    int    `json:"id"`
@@ -37,7 +37,7 @@ type UserToken struct {
 	Token string `json:"token"`
 }
 
-func AuthenticateUser(user User, fpath string) ([]byte, error) {
+func AuthenticateUser(user User, fpath string) (b []byte, user_id int, e error) {
 	status, _ := IsFileEmpty(fpath)
 	if status {
 		file, _ := os.Open(fpath)
@@ -46,7 +46,7 @@ func AuthenticateUser(user User, fpath string) ([]byte, error) {
 		var filecontent Chirps
 		err := json.Unmarshal(data, &filecontent)
 		if err != nil {
-			return nil, err
+			return nil, -1, err
 		}
 		for _, userobj := range filecontent.Users {
 			if userobj.Email == user.Email {
@@ -54,19 +54,22 @@ func AuthenticateUser(user User, fpath string) ([]byte, error) {
 				if passwordMatch {
 					authenticatedUser := UserInfo{Id: userobj.Id, Email: userobj.Email}
 					jsondata, err := json.Marshal(authenticatedUser)
-					return jsondata, err
+					if err != nil {
+						log.Printf("Cound not marshal authenticateduser")
+					}
+					return jsondata, userobj.Id, nil
 				} else {
-					return nil, fmt.Errorf("email/password invalid")
+					return nil, -1, fmt.Errorf("email/password invalid")
 				}
 			} else {
 				continue
 			}
 
 		}
-		return nil, fmt.Errorf("email/password invalid")
+		return nil, -1, fmt.Errorf("email/password invalid")
 	}
 
-	return nil, nil
+	return nil, -1, nil
 }
 
 func checkSecret(hashedSecret string, userInputSecret string) bool {
