@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,7 @@ var (
 type application struct {
 	config config
 	logger *log.Logger
+	db     *fsdatabase.Database
 }
 
 func middlewareLogger(next http.Handler) http.Handler {
@@ -67,7 +69,8 @@ func (app *application) Routes() *chi.Mux {
 	apirouter.Post("/chirps", saveChirpHandler)
 	apirouter.Post("/users", CreateUserHandler)
 	apirouter.Put("/users", changeAccount)
-	apirouter.Post("/login", loginHandler)
+	apirouter.Post("/login", app.loginHandler)
+	apirouter.Post("/refresh", app.refreshTokenHandler)
 
 	mainrouter.Mount("/api", apirouter)
 	mainrouter.Mount("/admin", metricsrouter)
@@ -91,7 +94,7 @@ func changeAccount(w http.ResponseWriter, r *http.Request) {
 
 	userIDString, _ := token.Claims.GetSubject() //get userid from jwt
 	issuer, err := token.Claims.GetIssuer()
-	expectedIssuer := "chirpy"
+	expectedIssuer := "chirpy-access"
 	if issuer != expectedIssuer {
 		w.WriteHeader(401)
 		return
@@ -129,7 +132,52 @@ func verifyJwt(tokenString string) (*jwt.Token, error) {
 	return token, nil
 }
 
-func loginHandler(w http.ResponseWriter, r *http.Request) {
+func (app *application) refreshTokenHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	authHeader := r.Header.Get("Authorization")
+	log.Println("Got AuthHeader:", authHeader)
+	tokenString := strings.Split(authHeader, "Bearer ")[1]
+	_, err := verifyJwt(tokenString)
+	if err != nil {
+		w.WriteHeader(401)
+		w.Write([]byte("error: problem jwt verification in refreshtokenhandler"))
+		return
+	}
+
+	status, err := app.db.IsTokenRevoked(tokenString)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	//if revoked is true then http 401 error is returned
+	if status == true {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	jwttoken, err := verifyJwt(tokenString)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	claims := jwttoken.Claims.(*jwt.RegisteredClaims)
+	userString, _ := claims.GetSubject()
+	uid, _ := strconv.Atoi(userString)
+
+	newtoken, _ := generateJWT(uid, 3600, "chirpy-access")
+	response := map[string]string{"token": newtoken}
+	jsonresponse, err := json.Marshal(response)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(200)
+	w.Write(jsonresponse)
+
+}
+
+func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	fpath := "./data.json"
 	var user fsdatabase.User
@@ -152,10 +200,11 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Data received from login: ", user)
 
 	//now that user login is successful we generate jwt
-	expires_in_seconds := user.Expires_in_seconds
+	//expires_in_seconds := user.Expires_in_seconds
 	var user_tmp fsdatabase.UserToken
 
-	tokenString, _ := generateJWT(user_id, expires_in_seconds, "chirpy")
+	accessTokenString, _ := generateJWT(user_id, 3600, "chirpy-access")    //1 hour expire
+	refreshTokenString, _ := generateJWT(user_id, 86400, "chirpy-refresh") //60 days expiry
 	err = json.Unmarshal(jsondata, &user)
 	if err != nil {
 		w.WriteHeader(401)
@@ -165,15 +214,21 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("this is user: ", user)
 	user_tmp.Email = user.Email
 	user_tmp.Id = user.Id
-	user_tmp.Token = tokenString
+	user_tmp.Token = accessTokenString
+	user_tmp.Refresh_token = refreshTokenString
 
-	//refreshtokenString, err := generateJWT(userid, 5184000, "chirpy-refresh")
-	//for successful auth check respond 200 and email+id
-	//w.Header().Set("Authorization", "Bearer "+tokenString)
 	finalresp, err := json.Marshal(user_tmp)
 	if err != nil {
 		w.WriteHeader(401)
 		w.Write([]byte("error: marshaling jsondata"))
+		return
+	}
+	err = app.db.InsertToken(refreshTokenString)
+
+	if err != nil {
+		//w.WriteHeader(401)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		//w.Write([]byte(err.Error()))
 		return
 	}
 	w.WriteHeader(200)
@@ -184,7 +239,6 @@ func generateJWT(userid int, expires_in_seconds int, issuer string) (string, err
 	//sampleSecretKey := []byte("JtRp8DrxkynDo7mfRqMDaSfntlDqleoKfaMkcp0Fh33aCMR0mA8pOGcqsexlEEC8BTfDX2U1dVjkIbc1qnkr4g")
 	//log.Printf("generateJWT userid: %v , expiresInSeconds: %v , issuer: %v\n", userid, expires_in_seconds, issuer)
 	err := godotenv.Load()
-	log.Println("expires_in_seconds: ", expires_in_seconds)
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}

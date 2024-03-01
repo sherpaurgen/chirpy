@@ -32,9 +32,10 @@ type UserInfo struct {
 	Email string `json:"email"`
 }
 type UserToken struct {
-	Id    int    `json:"id"`
-	Email string `json:"email"`
-	Token string `json:"token"`
+	Id            int    `json:"id"`
+	Email         string `json:"email"`
+	Token         string `json:"token"`
+	Refresh_token string `json:"refresh_token"`
 }
 
 func AuthenticateUser(user User, fpath string) (b []byte, user_id int, e error) {

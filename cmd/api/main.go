@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	fsdatabase "github.com/sherpaurgen/boot/internal"
 )
 
 const version = "1.0.0"
@@ -24,10 +26,16 @@ func main() {
 	flag.Parse()
 
 	logger := log.New(os.Stdout, "Boot ", log.Ldate|log.Ltime)
-
+	dbfilename := "tokendb.sqlite"
+	db, err := fsdatabase.NewDatabase(dbfilename)
+	if err != nil {
+		log.Fatal("Error initializing database:", err)
+	}
+	defer db.Close()
 	app := &application{
 		config: cfg,
 		logger: logger,
+		db:     db,
 	}
 
 	srv := &http.Server{
@@ -39,7 +47,7 @@ func main() {
 	}
 
 	logger.Printf("Starting %s server on %s", cfg.env, srv.Addr)
-	err := srv.ListenAndServe()
+	err = srv.ListenAndServe()
 	logger.Fatal(err)
 
 }
