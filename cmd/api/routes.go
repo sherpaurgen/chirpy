@@ -71,6 +71,7 @@ func (app *application) Routes() *chi.Mux {
 	apirouter.Put("/users", changeAccount)
 	apirouter.Post("/login", app.loginHandler)
 	apirouter.Post("/refresh", app.refreshTokenHandler)
+	apirouter.Post("/revoke", app.revokeToken)
 
 	mainrouter.Mount("/api", apirouter)
 	mainrouter.Mount("/admin", metricsrouter)
@@ -131,6 +132,28 @@ func verifyJwt(tokenString string) (*jwt.Token, error) {
 	}
 	return token, nil
 }
+func (app *application) revokeToken(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	authHeader := r.Header.Get("Authorization")
+	tokenString := strings.Split(authHeader, "Bearer ")[1]
+	_, err := verifyJwt(tokenString)
+	if err != nil {
+		w.WriteHeader(401)
+		errorResponse := map[string]string{"error": err.Error()}
+		jsonResponse, _ := json.Marshal(errorResponse)
+		w.Write(jsonResponse)
+		return
+	}
+	err = app.db.DeleteToken(tokenString)
+	if err != nil {
+		w.WriteHeader(401)
+		errorResponse := map[string]string{"error": err.Error()}
+		jsonResponse, _ := json.Marshal(errorResponse)
+		w.Write(jsonResponse)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
 
 func (app *application) refreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -140,24 +163,27 @@ func (app *application) refreshTokenHandler(w http.ResponseWriter, r *http.Reque
 	_, err := verifyJwt(tokenString)
 	if err != nil {
 		w.WriteHeader(401)
-		w.Write([]byte("error: problem jwt verification in refreshtokenhandler"))
+		errorResponse := map[string]string{"error": err.Error()}
+		jsonResponse, _ := json.Marshal(errorResponse)
+		w.Write(jsonResponse)
 		return
 	}
-
-	status, err := app.db.IsTokenRevoked(tokenString)
+	var revokedstatus bool
+	revokedstatus, err = app.db.IsTokenRevoked(tokenString)
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-	//if revoked is true then http 401 error is returned
-	if status == true {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	//if revokedStatus is true then http 401 error is returned
+
+	if revokedstatus {
+		http.Error(w, "refresh token is revoked", http.StatusUnauthorized)
 		return
 	}
 	jwttoken, err := verifyJwt(tokenString)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 	claims := jwttoken.Claims.(*jwt.RegisteredClaims)
