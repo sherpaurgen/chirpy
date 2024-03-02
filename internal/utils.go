@@ -2,6 +2,7 @@ package fsdatabase
 
 import (
 	"database/sql"
+	"fmt"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -44,4 +45,20 @@ func (db *Database) IsTokenRevoked(refreshtoken string) (bool, error) {
 	}
 	//if token exist and not revoked then the IsTokenRevoked will return FALSE
 	return !exists, nil
+}
+
+func (db *Database) DeleteToken(refreshtoken string) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	query := "DELETE FROM tokens WHERE tokenName = ?"
+	stmt, err := db.DB.Prepare(query)
+	if err != nil {
+		return fmt.Errorf("error preparing statement: %v", err)
+	}
+	defer stmt.Close()
+	_, err = stmt.Exec(refreshtoken)
+	if err != nil {
+		return fmt.Errorf("error deleting token: %v", err)
+	}
+	return nil
 }
