@@ -12,8 +12,9 @@ import (
 )
 
 type Chirp struct {
-	Id   int    `json:"id"`
-	Body string `json:"body"`
+	Id       int    `json:"id"`
+	Body     string `json:"body"`
+	AuthorId int    `json:"author_id"`
 }
 
 type Chirps struct {
@@ -36,6 +37,60 @@ type UserToken struct {
 	Email         string `json:"email"`
 	Token         string `json:"token"`
 	Refresh_token string `json:"refresh_token"`
+}
+
+func DeleteChrip(chirpid int, userid int, fpath string) bool {
+	state, err := IsFileEmpty(fpath)
+	if err != nil {
+		log.Fatal("data file not found")
+	}
+	if state {
+		file, _ := os.Open(fpath)
+		data, _ := io.ReadAll(file)
+		var filecontent Chirps
+		err := json.Unmarshal(data, &filecontent)
+		if err != nil {
+			log.Fatal("error processing datafile")
+		}
+		temp_filecontent := filecontent
+		matched := false
+		for _, chirp_userobj := range filecontent.Chirps {
+			if chirp_userobj.AuthorId == userid && chirpid == chirp_userobj.Id {
+				log.Printf("delete match uid %v and chirpid: %v", chirp_userobj.AuthorId, chirp_userobj.Id)
+				delete(temp_filecontent.Chirps, strconv.Itoa(userid))
+				matched = true
+			} else {
+				continue
+			}
+		}
+		file.Close()
+		updatedcontent, err := json.Marshal(temp_filecontent)
+		if err != nil {
+			log.Println("Marshalling error:", err)
+			os.Exit(1)
+		}
+		file, _ = os.OpenFile(fpath, os.O_RDWR, 0644)
+		defer file.Close()
+		//now moving to first nblock of the file
+		_, err = file.Seek(0, 0)
+		if err != nil {
+			log.Println("Fileseek error:", err)
+			os.Exit(1)
+		}
+		err = file.Truncate(0)
+		if err != nil {
+			log.Println("FileTruncate error:", err)
+			os.Exit(1)
+		}
+		_, err = file.Write(updatedcontent)
+		if err != nil {
+			log.Println("FileWrite error:", err)
+			os.Exit(1)
+		}
+		return matched
+	}
+
+	return false
 }
 
 func AuthenticateUser(user User, fpath string) (b []byte, user_id int, e error) {
@@ -262,7 +317,7 @@ func ReadChirpData(fpath string, id string) ([]byte, error) {
 	log.Println(chirpsData)
 	// if url param has id of chirp return just particular id
 	// get api/chirps/{id} START
-	log.Println("The one before id", id)
+
 	if id != "" {
 		for k, v := range chirpsData.Chirps {
 			if id == k { //compares the outer id with id url param ; both are string
@@ -290,9 +345,6 @@ func ReadChirpData(fpath string, id string) ([]byte, error) {
 	if err != nil {
 		fmt.Println("Error:", err)
 	}
-	fmt.Println("transformed data:--")
-	fmt.Println(string(transformedData))
-
 	return transformedData, nil
 }
 
@@ -330,8 +382,8 @@ func WriteChirpData(fpath string, newchirp Chirp) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		chripLength := len(chirpsData.Chirps)
-		newchirp.Id = chripLength + 1
+		chirpLength := len(chirpsData.Chirps)
+		newchirp.Id = chirpLength + 1
 		// adding new chirp to chirpsData
 		idStr := strconv.Itoa(newchirp.Id)
 		chirpsData.Chirps[idStr] = newchirp
