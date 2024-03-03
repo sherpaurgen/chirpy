@@ -67,6 +67,7 @@ func (app *application) Routes() *chi.Mux {
 	apirouter.Get("/chirps/{id}", getChirp)
 	apirouter.Post("/validate_chirp", validatechirpHandler)
 	apirouter.Post("/chirps", saveChirpHandler)
+	apirouter.Delete("/chirps/{id}", deleteChirpHandler)
 	apirouter.Post("/users", CreateUserHandler)
 	apirouter.Put("/users", changeAccount)
 	apirouter.Post("/login", app.loginHandler)
@@ -114,24 +115,6 @@ func changeAccount(w http.ResponseWriter, r *http.Request) {
 	w.Write(res)
 }
 
-func verifyJwt(tokenString string) (*jwt.Token, error) {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Cannot load env in changeAccount")
-	}
-	claimsStruct := jwt.RegisteredClaims{}
-	token, err := jwt.ParseWithClaims(
-		tokenString,
-		&claimsStruct,
-		func(token *jwt.Token) (interface{}, error) {
-			return []byte(os.Getenv("JWT_SECRET_KEY")), nil
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-	return token, nil
-}
 func (app *application) revokeToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	authHeader := r.Header.Get("Authorization")
@@ -261,6 +244,25 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(finalresp)
 }
 
+func verifyJwt(tokenString string) (*jwt.Token, error) {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Cannot load env in changeAccount")
+	}
+	claimsStruct := jwt.RegisteredClaims{}
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		&claimsStruct,
+		func(token *jwt.Token) (interface{}, error) {
+			return []byte(os.Getenv("JWT_SECRET_KEY")), nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return token, nil
+}
+
 func generateJWT(userid int, expires_in_seconds int, issuer string) (string, error) {
 	//sampleSecretKey := []byte("JtRp8DrxkynDo7mfRqMDaSfntlDqleoKfaMkcp0Fh33aCMR0mA8pOGcqsexlEEC8BTfDX2U1dVjkIbc1qnkr4g")
 	//log.Printf("generateJWT userid: %v , expiresInSeconds: %v , issuer: %v\n", userid, expires_in_seconds, issuer)
@@ -293,6 +295,34 @@ func generateJWT(userid int, expires_in_seconds int, issuer string) (string, err
 	return tokenString, nil
 }
 
+func deleteChirpHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("deleteChirpHandler called")
+	w.Header().Set("Content-Type", "application/json")
+	chirpidstr := chi.URLParam(r, "id")
+	chirpidint, _ := strconv.Atoi(chirpidstr)
+	fpath := "./data.json"
+	authHeader := r.Header.Get("Authorization")
+	tokenstring := strings.Split(authHeader, "Bearer ")[1]
+	t, err := verifyJwt(tokenstring)
+	if err != nil {
+		w.WriteHeader(401)
+		errorResponse := map[string]string{"error": err.Error()}
+		jsonResponse, _ := json.Marshal(errorResponse)
+		w.Write(jsonResponse)
+		return
+	}
+	userIDString, _ := t.Claims.GetSubject()
+	useridInt, _ := strconv.Atoi(userIDString)
+	res := fsdatabase.DeleteChrip(chirpidint, useridInt, fpath)
+
+	if !res {
+		w.WriteHeader(403)
+	} else {
+		w.WriteHeader(200)
+	}
+
+}
+
 func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
@@ -318,7 +348,6 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 func getChirp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	fpath := "./data.json"
-	log.Printf("getchiphandler called...%v\n", fpath)
 	id := chi.URLParam(r, "id")
 	jsondata, err := fsdatabase.ReadChirpData(fpath, id)
 	if jsondata == nil || err != nil {
@@ -333,16 +362,28 @@ func getChirp(w http.ResponseWriter, r *http.Request) {
 func getAllChirpHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	fpath := "./data.json"
-	log.Printf("getchiphandler called...%v\n", fpath)
 	id := "" //sending empty id string for getall chirp
 	jsondata, _ := fsdatabase.ReadChirpData(fpath, id)
-	log.Print(string(jsondata))
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsondata)
 }
+
 func saveChirpHandler(w http.ResponseWriter, r *http.Request) {
 	fpath := "./data.json"
 	w.Header().Set("Content-Type", "application/json")
+	var authHeader string
+	authHeader = r.Header.Get("Authorization")
+	tokenString := strings.Split(authHeader, "Bearer ")[1]
+	t, err := verifyJwt(tokenString)
+	if err != nil {
+		w.WriteHeader(401)
+		errorResponse := map[string]string{"error": err.Error()}
+		jsonResponse, _ := json.Marshal(errorResponse)
+		w.Write(jsonResponse)
+		return
+	}
+	userIDString, _ := t.Claims.GetSubject()
+	useridInt, _ := strconv.Atoi(userIDString)
 	wordsToReplace := []string{"kerfuffle", "sharbert", "fornax"}
 	type parameters struct {
 		Body string `json:"body"`
@@ -351,14 +392,13 @@ func saveChirpHandler(w http.ResponseWriter, r *http.Request) {
 		Error string `json:"error"`
 	}
 	type validBody struct {
-		Id   int    `json:"id"`
-		Body string `json:"body"`
+		Id       int    `json:"id"`
+		Body     string `json:"body"`
+		AuthorId int    `json:"author_id"`
 	}
-
-	w.Header().Set("Content-Type", "application/json")
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
-	err := decoder.Decode(&params)
+	err = decoder.Decode(&params)
 	fmt.Println(params.Body)
 	if params.Body == "" || err != nil {
 		respBody := errorMsg{
@@ -385,8 +425,9 @@ func saveChirpHandler(w http.ResponseWriter, r *http.Request) {
 	cleanword := replaceWords(params.Body, wordsToReplace)
 	//now that the tweet is valid
 	sanitizedData := fsdatabase.Chirp{
-		Body: cleanword,
-		Id:   0,
+		Body:     cleanword,
+		Id:       -1,
+		AuthorId: useridInt,
 	}
 
 	jsondata, err := fsdatabase.WriteChirpData(fpath, sanitizedData)
@@ -399,7 +440,9 @@ func saveChirpHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write(dat)
 		return
 	}
-	w.WriteHeader(http.StatusCreated)
+	log.Println("Response---->", string(jsondata))
+
+	w.WriteHeader(201)
 	w.Write(jsondata)
 }
 
